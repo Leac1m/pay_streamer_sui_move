@@ -28,6 +28,10 @@ module pay_streamer::pay_streamer {
     /// Fee can't be greater or equal to [`FEE_BASE`]
     const EFeeTooHigh: u64 = 8;
 
+    // Adding new error constants
+    const EOVERFLOW: u64 = 12;
+    const MAX_U128: u128 = 340282366920938463463374607431768211455; // 2^128 - 1
+
     /* === constants === */
     const FEE_BASE: u64 = 10_000;
 
@@ -62,6 +66,11 @@ module pay_streamer::pay_streamer {
     public struct AdminCap has key, store {
         id: UID,
     }
+
+    public struct FeeUpdated has copy, drop {
+        old_fee: u64,
+        new_fee: u64,
+    }
     
     fun init(ctx: &mut TxContext) {
         let mut payments = Payments {
@@ -80,8 +89,12 @@ module pay_streamer::pay_streamer {
     }
 
     /* == Math == */
+    // 1. fee() function has potential overflow issues and should use safer math:
     fun fee(total_amount: u64, percent: u64): u64 {
-        ceil_div_u128(((total_amount * percent) as u128 ), ((FEE_BASE + percent) as u128)) as u64
+        assert!(percent <= FEE_BASE, EFeeTooHigh);
+        // Check for potential overflow in multiplication
+        assert!((total_amount as u128) * (percent as u128) <= MAX_U128, EOVERFLOW);
+        ceil_div_u128(((total_amount * percent) as u128), ((FEE_BASE + percent) as u128)) as u64
     }
 
     fun ceil_div_u128(num: u128, div: u128): u128 {
@@ -91,7 +104,13 @@ module pay_streamer::pay_streamer {
     // User Funtions
 
     /// Creates a [`Payment`] struct with a status of [`CREATED`].
+    // 2. create_payment lacks proper validation:
     public fun create_payment<COIN>(mut coin: Coin<COIN>, duration: u64, payments: &mut Payments, ctx: &mut TxContext) : Payment<COIN> {
+        // Add coin whitelist check
+        assert!(bag::contains(&payments.coin_whitelist, type_name::get<COIN>()), ECoinNotSupported);
+        // Add duration validation
+        assert!(duration > 0, 0);
+        
         extract_fee(&mut coin, payments, ctx);
 
         let payment = Payment<COIN> {
@@ -111,7 +130,6 @@ module pay_streamer::pay_streamer {
         );
         payment
     }
-
     
 
     /// Activates a [`Payment`] 
@@ -213,17 +231,22 @@ module pay_streamer::pay_streamer {
         ctx: &mut TxContext
     ): Coin<COIN> {
         let payment = ofield::borrow_mut<ID, Payment<COIN>>(&mut payments.id, payer.payment_id);
+        // Add proper status validation
         assert!(payment.status != CANCELLED, 0);
+        assert!(payment.status == ACTIVE || payment.status == PAUSED || payment.status == CREATED, 0);
+        
         if (payment.status == PAUSED) {
             let previous_pause = df::remove(&mut payment.id, PAUSED);
             let pause_duration = current_time(clock) - previous_pause;
             payment.pause_duration = payment.pause_duration + pause_duration;
-
         };
 
         set_status<COIN>(payment, CANCELLED);
 
-        let withdrawable = get_payer_withdrawable<COIN>(payer,payment, clock, ctx);
+        // Ensure there's balance to withdraw
+        assert!(balance::value(&payment.current_balance) > 0, 0);
+        
+        let withdrawable = get_payer_withdrawable<COIN>(payer, payment, clock, ctx);
         withdrawable
     }
     
@@ -245,8 +268,16 @@ module pay_streamer::pay_streamer {
     /// Set fee rates.
     /// 30 represents 0.3%
     public fun set_fee_percent(_: &AdminCap, payments: &mut Payments, fee_rate: u64) {
+        // Add minimum fee validation and more specific error
+        assert!(fee_rate > 0, 0); // Cannot set zero fee
         assert!(fee_rate <= FEE_BASE, EFeeTooHigh);
+        // Add event emission for fee changes
+        let old_fee = payments.fee;
         payments.fee = fee_rate;
+        event::emit(FeeUpdated { 
+            old_fee,
+            new_fee: fee_rate 
+        });
     }
 
     /// Adds a coin type [`Coin<COIN>`] into [`coin_whitelist`]
