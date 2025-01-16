@@ -1,69 +1,110 @@
-A simple Sui Move stream payment-based payroll system.
+# Sui Move Stream Payment-Based Payroll System
 
-## Introduction
-+ This module allows anyone to send micro-payments per time interval to another user.
-+ After a `Payment` is created, the `Payee` can start the payment by providing the recipient's address.
-+ `Payment` is then stored in a shared object `Payments` and capabilities (`PayeeCap` and `PayerCap`) for access control.
-+ The `PayerCap` has privilages like `pause_payment`, `resume_payment` and `cancel_payment`.
-+ The `PayeeCap` has the privilege of `withdraw_payment`. This takes into account the amount that has already been withdrawn.
-+ Composability and convenience were put into consideration when creating functions and structs.
+## Overview
 
-## Core Sturcts
-1. Payments
-+ `Payments` is a shared object that keeps information like fee rates, supported tokens, and the balance of fees collected.
-+ Also when a payment is active, Its `Payment` struct is dynamically linked to this shared object.
+The Sui Move Stream Payment-Based Payroll System is a decentralized application that allows users to send micro-payments at specified time intervals to other users. This module is designed to facilitate payroll systems, enabling seamless and automated payment streams.
 
-2. Payment
-+ `Payment` is an object created by a payer. It stores the balance to be "streamed" along with time-related variables to take track of how much has been "streamed".
+## Features
 
-3. PayerCap
-+ `PayerCap` is an access control for the payer.
+- **Micro-Payments**: Send small payments over time to another user.
+- **Payment Management**: Create, start, pause, resume, and cancel payments.
+- **Access Control**: Utilize capabilities (`PayerCap` and `PayeeCap`) for secure access management.
+- **Fee Management**: Set and update fee rates for transactions.
+- **Token Whitelisting**: Admins can add new coin types to the whitelist for use in payments.
 
-4. PayeeCap
-+ `PayeeCap` is an access control for the recipient.
+## Getting Started
 
-5. AdminCap
-+ `AdminCap` has the authority to alter the `Payments` object. 
-+ It can change fee rates, withdraw fee balance, and add a new coin to the whitelist.
+### Prerequisites
 
-## Core function
-1. create_payment<COIN-TYPE>
-+ Create a `Payment` struct.
-+ Input with `Coin`, `duration` (how long you want to stream), `payments`
-+ Note: `Coin`: balance you want to stream + fee (default 0.3%).
+To run this codebase, you need to have the following installed on your machine:
 
-2. start_payment<COIN-TYPE>
-+ starts a `Payment` and sends `PayeeCap` to `Recipient address`.
-+ Input with `Payment` `Recipient address` `&Clock` `&mut Payments`
-+ Output: `PayerCap`.
+- [Sui](https://sui.io/) - The Sui blockchain framework.
+- A compatible development environment for Sui Move.
 
-3. pause_payment<COIN-TYPE>
-+ pause a `Payment`.
-+ permission: user with `PayerCap`
+### Installation
 
-4. resume_payment<COIN-TYPE>
-+ Resume a pause `Payment`, fails in `Payment` status in not `PAUSED`.
-+ permission: user with `PayerCap`
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/yourusername/sui-move-pay-streamer.git
+   cd sui-move-pay-streamer
+   ```
 
-5. cancel_payment<COIN-TYPE>
-+ cancel a `Payment`, fails in `Payment` status in already `CANCELLED`.
-+ Returns: "unstreamed" `Coin<COIN-TYPE>`
-+ permission: user with `PayerCap`
+2. **Set Up Your Environment**:
+   Follow the Sui documentation to set up your local environment and ensure you have the necessary dependencies installed.
 
-4. withdraw_payment<COIN-TYPE>
-+ withdraw stream coins from `Payment`.
-+ can be run multiple times.
-+ Keep account of how much has been withdrawn.
-+ Returns: "streamed" `Coin<COIN-TYPE>
-+ permission: user with `PayeeCap`.
+3. **Compile the Code**:
+   Use the Sui CLI to compile the Move modules:
+   ```bash
+   sui move build
+   ```
 
-5. set_fee_percent<COIN-TYPE>
-+ Change current fee rates.
-+ permission: user with `AdminCap`
+4. **Run Tests**:
+   Ensure everything is working correctly by running the unit tests:
+   ```bash
+   sui move test
+   ```
 
-6. Admin_withdraw<COIN-TYPE>
-+ withdraw a from fee balance.
-+ permission: user with `AdminCap`
+## Core Structures
 
-## Unit test
-![](<unit_tests.png>)
+1. **Payments**:
+   - A shared object that maintains information such as fee rates, supported tokens, and the balance of fees collected.
+   - Dynamically links to active `Payment` structs.
+
+2. **Payment**:
+   - Represents a payment created by a payer, storing the balance to be streamed and time-related variables to track the streaming progress.
+
+3. **PayerCap**:
+   - An access control structure for the payer, granting permissions to manage payments.
+
+4. **PayeeCap**:
+   - An access control structure for the recipient, allowing them to withdraw funds.
+
+5. **AdminCap**:
+   - Grants administrative privileges to modify the `Payments` object, including changing fee rates, withdrawing fee balances, and adding new coins to the whitelist.
+
+## Core Functions
+
+1. **create_payment<COIN-TYPE>**:
+   - Creates a `Payment` struct.
+   - **Inputs**: `Coin`, `duration` (streaming duration), `payments`.
+   - **Note**: The `Coin` must cover the balance to stream plus the fee (default is 0.3%).
+
+2. **start_payment<COIN-TYPE>**:
+   - Starts a `Payment` and sends `PayeeCap` to the recipient's address.
+   - **Inputs**: `Payment`, `Recipient address`, `&Clock`, `&mut Payments`.
+   - **Output**: Returns `PayerCap`.
+
+3. **pause_payment<COIN-TYPE>**:
+   - Pauses an active `Payment`.
+   - **Permission**: User with `PayerCap`.
+
+4. **resume_payment<COIN-TYPE>**:
+   - Resumes a paused `Payment`. Fails if the `Payment` status is not `PAUSED`.
+   - **Permission**: User with `PayerCap`.
+
+5. **cancel_payment<COIN-TYPE>**:
+   - Cancels a `Payment`. Fails if the `Payment` status is already `CANCELLED`.
+   - **Returns**: "Unstreamed" `Coin<COIN-TYPE>`.
+   - **Permission**: User with `PayerCap`.
+
+6. **withdraw_payment<COIN-TYPE>**:
+   - Withdraws streamed coins from a `Payment`.
+   - Can be called multiple times while keeping track of the total withdrawn amount.
+   - **Returns**: "Streamed" `Coin<COIN-TYPE>`.
+   - **Permission**: User with `PayeeCap`.
+
+7. **set_fee_percent<COIN-TYPE>**:
+   - Changes the current fee rates.
+   - **Permission**: User with `AdminCap`.
+
+8. **admin_withdraw<COIN-TYPE>**:
+   - Withdraws from the fee balance.
+   - **Permission**: User with `AdminCap`.
+
+## Unit Tests
+
+The codebase includes unit tests to ensure the functionality of the payment system. You can run the tests using the following command:
+
+```bash
+sui move test
+```
