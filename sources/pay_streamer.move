@@ -101,6 +101,14 @@ module pay_streamer::pay_streamer {
         if (num == 0) 0 else (num - 1) / div + 1
     }
 
+    /// Get total amount streamed
+    fun get_amount(time_spent :u64, duration: u64, initial_balance: u64): u64 {
+        if (time_spent < duration) {
+	        (time_spent * initial_balance / duration) as u64
+        } else {
+            initial_balance
+        }
+    }
     // User Funtions
 
     /// Creates a [`Payment`] struct with a status of [`CREATED`].
@@ -338,6 +346,16 @@ module pay_streamer::pay_streamer {
         coin::put(bank, coin.split(fee, ctx));
     }
 
+    fun get_pause_duration<COIN>(payment: &Payment<COIN>, clock: &Clock): u64 {
+    if (payment.status == PAUSED) {
+            let previous_pause = df::borrow<u64, u64>(&payment.id, PAUSED);
+            let  pause_duration = current_time(clock) - *previous_pause;
+            payment.pause_duration + pause_duration 
+        } else {
+            payment.pause_duration
+        }
+    }
+
     /// Extracts withdrable token for owner of [`PayerCap`]
     /// in an instance where payment has been cancelled.
     fun get_payer_withdrawable<COIN>(
@@ -346,9 +364,11 @@ module pay_streamer::pay_streamer {
         clock: &Clock,
         ctx: &mut TxContext
     ): Coin<COIN> {
-        let total_time_spent = current_time(clock) - payment.start_date - payment.pause_duration;
+        let pause_duration = get_pause_duration<COIN>(payment, clock);
 
-        let paid_amount = ((total_time_spent / payment.duration) * payment.initial_balance) as u64;
+        let total_time_spent = current_time(clock) - payment.start_date - pause_duration;
+
+        let paid_amount = get_amount(total_time_spent, payment.duration, payment.initial_balance);
         let available_amount = payment.initial_balance - paid_amount;
 
         coin::take<COIN>(&mut payment.current_balance, available_amount, ctx)
@@ -357,19 +377,13 @@ module pay_streamer::pay_streamer {
     /// Extracts withdrable token for owner of [`PayeeCap`]
     /// in an instance where user wants to withdraw.
     fun get_payee_withdrawable<COIN>(payee: &mut PayeeCap, payment: &mut Payment<COIN>, clock: &Clock,ctx: &mut TxContext): Coin<COIN> {
-        let pause_duration = if (payment.status == PAUSED) {
-            let previous_pause = df::borrow<u64, u64>(&payment.id, PAUSED);
-            let  pause_duration = current_time(clock) - *previous_pause;
-            payment.pause_duration + pause_duration 
-        } else {
-            payment.pause_duration
-        };
+        let pause_duration = get_pause_duration<COIN>(payment, clock);
 
         let total_time_spent = current_time(clock) - payment.start_date - pause_duration;
 
-        let total_amount = (total_time_spent * payment.initial_balance / payment.duration) as u64;
-        let available_amount = total_amount - payee.amount_withdrawned;
-        payee.amount_withdrawned = payee.amount_withdrawned + available_amount;
+        let streamed_amount = get_amount(total_time_spent, payment.duration, payment.initial_balance);
+        let available_amount = streamed_amount - payee.amount_withdrawned;
+        payee.amount_withdrawned = streamed_amount;
 
         coin::take<COIN>(&mut payment.current_balance, available_amount, ctx)
     }
