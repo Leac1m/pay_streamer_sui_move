@@ -11,8 +11,9 @@ module pay_streamer::pay_streamer_tests {
     const ADDR2: address = @0xB;
 
     const DUMMY_MS: u64 = 987654321;
-    const HOUR_TIMEFRAME: u64 = 3600;
-    const DAY_TIMEFRAME: u64 = 3600 * 24;
+    const HOUR_TIMEFRAME: u64 = 3600 * 1000;
+    const DAY_TIMEFRAME: u64 = HOUR_TIMEFRAME * 24;
+    
     
     //otw for coin used in tests
     public struct COIN1 has drop {}
@@ -251,6 +252,45 @@ module pay_streamer::pay_streamer_tests {
     }
 
     #[test]
+    fun test_get_amount() {
+        // Should return 250M after 20mins if duration is 1 hour.
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(HOUR_TIMEFRAME / 4, HOUR_TIMEFRAME, 1_000_000_000)
+            , 250_000_000
+        );
+
+        // Should return 500M after 40mins if duration is 1 hour.
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(HOUR_TIMEFRAME / 2, HOUR_TIMEFRAME, 1_000_000_000)
+            , 500_000_000
+        );
+
+        // Should return 500M after half a day if duration is 1 day.
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(DAY_TIMEFRAME / 2, DAY_TIMEFRAME, 1_000_000_000)
+            , 500_000_000
+        );
+
+        // Should return 500M after 3 days if duration is 6 days.
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(DAY_TIMEFRAME * 6 / 2, DAY_TIMEFRAME * 6, 1_000_000_000)
+            , 500_000_000
+        );
+
+        // Should return all if [`time_past`] is greater than duration.
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(DAY_TIMEFRAME, DAY_TIMEFRAME / 2, 1_000_000_000)
+            , 1_000_000_000
+        );
+
+        // Should return zero if [`time_past`] is zero
+        test_utils::assert_eq<u64>(
+            ps::test_get_amount(0, DAY_TIMEFRAME / 2, 1_000_000_000)
+            , 0
+        );
+    }
+
+    #[test]
     fun test_cancel_payent() {
         let mut scenario = test_scenario_init(ADDR1);
         let payment = test_scenario_create_payment(&mut scenario, 1003, HOUR_TIMEFRAME);
@@ -277,7 +317,6 @@ module pay_streamer::pay_streamer_tests {
     fun test_withdraw_payment() {
         let mut scenario = test_scenario_init(ADDR1);
         let payment = test_scenario_create_payment(&mut scenario, 60180, HOUR_TIMEFRAME);
-        // let payment_id = object::id(&payment);
         let mut clock = clock::create_for_testing(ctx(&mut scenario));
         clock.set_for_testing(DUMMY_MS);
 
@@ -285,7 +324,7 @@ module pay_streamer::pay_streamer_tests {
         let mut payments = ts::take_shared<ps::Payments>(&scenario);
         {   
             let payer_cap = payments.start_payment<SUI>(payment, ADDR2, &clock, ctx(&mut scenario));
-            clock.increment_for_testing(45 * 60); //45 minutes
+            clock.increment_for_testing(45 * 60 * 1000); //45 minutes
             transfer::public_transfer(payer_cap, ADDR1);
         };
 

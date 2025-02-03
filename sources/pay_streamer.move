@@ -414,6 +414,7 @@ module pay_streamer::pay_streamer {
          id.delete();
          current_balance.destroy_for_testing();
     }
+
     #[test_only]
     public fun get_payment<COIN>(payments: &mut Payments, payment_id: ID): Payment<COIN>{
         ofield::remove<ID, Payment<COIN>>(&mut payments.id, payment_id)
@@ -433,5 +434,10 @@ module pay_streamer::pay_streamer {
         status: u64,
     ){
         assert!(payment.status == status, EValueNotEqual);
+    }
+
+    #[test_only]
+    public fun test_get_amount(time_spent: u64, duration: u64, initial_balance: u64): u64 {
+        get_amount(time_spent, duration, initial_balance)
     }
 }
